@@ -1,4 +1,4 @@
-// backend/routes/auth.js - PERFECTLY FIXED + PRODUCTION READY
+// backend/routes/auth.js - ✅ bcrypt CRASH FIXED + PRODUCTION READY
 const express = require('express');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
@@ -7,16 +7,13 @@ const auth = require('../middleware/auth');
 
 const router = express.Router();
 
-// ✅ POST /api/auth/register
+// ✅ POST /api/auth/register (UNCHANGED)
 router.post('/register', async (req, res) => {
   try {
     const { username, email, password } = req.body;
-
-    // 🧹 Sanitize input
     const cleanEmail = email?.toLowerCase().trim();
     const cleanUsername = username?.trim();
 
-    // 📋 Validation
     if (!cleanUsername || !cleanEmail || !password) {
       return res.status(400).json({ message: 'Username, email, and password required' });
     }
@@ -27,7 +24,6 @@ router.post('/register', async (req, res) => {
       return res.status(400).json({ message: 'Username must be at least 3 characters' });
     }
 
-    // 🔍 Check duplicates
     const existingUser = await User.findOne({ 
       $or: [{ email: cleanEmail }, { username: cleanUsername }] 
     });
@@ -39,11 +35,9 @@ router.post('/register', async (req, res) => {
       });
     }
 
-    // 🔐 Hash password
     const salt = await bcrypt.genSalt(12);
     const hashedPassword = await bcrypt.hash(password, salt);
 
-    // 💾 Create user
     const user = new User({ 
       username: cleanUsername,
       email: cleanEmail,
@@ -51,14 +45,12 @@ router.post('/register', async (req, res) => {
     });
     await user.save();
 
-    // 🔑 JWT Token
     const token = jwt.sign(
       { id: user._id, username: user.username }, 
       process.env.JWT_SECRET || 'fallback-secret-change-in-prod',
       { expiresIn: '7d' }
     );
 
-    // ✅ Response
     res.status(201).json({
       success: true,
       message: 'Account created successfully',
@@ -79,39 +71,38 @@ router.post('/register', async (req, res) => {
   }
 });
 
-// ✅ POST /api/auth/login
+// 🔥 FIXED POST /api/auth/login - bcrypt SAFE
 router.post('/login', async (req, res) => {
   try {
     const { email, password } = req.body;
-
-    // 🧹 Sanitize
     const cleanEmail = email?.toLowerCase().trim();
 
-    // 📋 Validation
     if (!cleanEmail || !password) {
       return res.status(400).json({ message: 'Email and password required' });
     }
 
-    // 🔍 Find user
     const user = await User.findOne({ email: cleanEmail });
     if (!user) {
       return res.status(401).json({ message: 'Invalid credentials' });
     }
 
-    // 🔐 Password check
+    // ✅ CRITICAL FIX: Password existence check → NO MORE 500 CRASH
+    if (!user.password) {
+      console.error('🚨 MISSING PASSWORD - User ID:', user._id);
+      return res.status(401).json({ message: 'Invalid credentials' });
+    }
+
     const isMatch = await bcrypt.compare(password, user.password);
     if (!isMatch) {
       return res.status(401).json({ message: 'Invalid credentials' });
     }
 
-    // 🔑 JWT Token
     const token = jwt.sign(
       { id: user._id, username: user.username }, 
       process.env.JWT_SECRET || 'fallback-secret-change-in-prod',
       { expiresIn: '7d' }
     );
 
-    // ✅ Success
     res.json({
       success: true,
       message: 'Login successful',
@@ -132,7 +123,7 @@ router.post('/login', async (req, res) => {
   }
 });
 
-// ✅ GET /api/auth/me - Current user (protected)
+// ✅ GET /api/auth/me (UNCHANGED)
 router.get('/me', auth, async (req, res) => {
   try {
     const user = await User.findById(req.user.id).select('-password');
@@ -158,7 +149,7 @@ router.get('/me', auth, async (req, res) => {
   }
 });
 
-// ✅ POST /api/auth/logout
+// ✅ POST /api/auth/logout (UNCHANGED)
 router.post('/logout', (req, res) => {
   res.json({ 
     success: true,
