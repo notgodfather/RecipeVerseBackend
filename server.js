@@ -1,18 +1,22 @@
-// backend/server.js - FULLY PRODUCTION-READY + PERFECT ROUTING
+// backend/server.js - PERFECT PRODUCTION VERSION + MISSING FIXES
 require('dotenv').config();
 const express = require('express');
 const mongoose = require('mongoose');
 const cors = require('cors');
-const morgan = require('morgan'); // Logging
-const helmet = require('helmet');  // Security
-const rateLimit = require('express-rate-limit'); // DDoS protection
+const cookieParser = require('cookie-parser'); // ✅ MISSING!
+const morgan = require('morgan');
+const helmet = require('helmet');
+const rateLimit = require('express-rate-limit');
 
 const app = express();
 
-// 🔥 SECURITY MIDDLEWARE (Production Essential)
-app.use(helmet()); // Headers security
+// 🔥 SECURITY (Production Essential)
+app.use(helmet());
 
-// 🌐 CORS - Dynamic for dev/prod
+// 🍪 Cookies - For auth tokens
+app.use(cookieParser());
+
+// 🌐 CORS - Multi-origin support
 app.use(cors({
   origin: process.env.NODE_ENV === 'production' 
     ? [process.env.FRONTEND_URL || 'https://recipe-versemongodb.vercel.app']
@@ -22,111 +26,95 @@ app.use(cors({
   allowedHeaders: ['Content-Type', 'Authorization']
 }));
 
-// 📊 Rate limiting - Prevent abuse
+// 📊 Rate limiting
 const limiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 100, // 100 requests per IP
-  message: { error: 'Too many requests, please try again later' },
+  windowMs: 15 * 60 * 1000,
+  max: 100,
+  message: { error: 'Too many requests' },
   standardHeaders: true,
   legacyHeaders: false,
 });
 app.use('/api/auth', limiter);
 
-// 🧹 Body parsing - Images + JSON
+// 🧹 Parsing
 app.use(express.json({ limit: '15mb' }));
 app.use(express.urlencoded({ extended: true, limit: '15mb' }));
 
-// 📈 Logging (dev only)
+// 📈 Logging (dev)
 if (process.env.NODE_ENV !== 'production') {
   app.use(morgan('dev'));
 }
 
-// 🔌 MongoDB - Production optimized
+// 🔌 MongoDB
 mongoose.set('strictQuery', true);
 mongoose.connect(process.env.MONGO_URI)
-  .then(() => console.log('✅ MongoDB connected successfully'))
-  .catch((err) => {
-    console.error('❌ MongoDB connection error:', err);
+  .then(() => console.log('✅ MongoDB Connected'))
+  .catch(err => {
+    console.error('❌ MongoDB Error:', err);
     process.exit(1);
   });
 
-// 🚀 ROUTES - PERFECT MOUNTING ORDER
-app.use('/api/auth', require('./routes/auth'));      // POST /api/auth/login ✅
-app.use('/api/recipes', require('./routes/recipes')); // GET /api/recipes
-app.use('/api/users', require('./routes/users'));     // GET /api/users/:id
+// 🚀 ROUTES - PERFECT ORDER
+app.use('/api/auth', require('./routes/auth'));
+app.use('/api/recipes', require('./routes/recipes'));
+app.use('/api/users', require('./routes/users'));
 
-// 🩺 Health check - Render monitoring
+// 🩺 Health Check
 app.get('/api/health', (req, res) => {
   res.json({ 
-    status: 'healthy', 
+    status: 'healthy',
     timestamp: new Date().toISOString(),
     mongodb: mongoose.connection.readyState === 1 ? 'connected' : 'disconnected',
     uptime: process.uptime(),
-    routes: ['/api/auth/login', '/api/recipes', '/api/users']
+    memory: process.memoryUsage()
   });
 });
 
-// 📱 Root - API docs
+// 📱 Root API Info
 app.get('/', (req, res) => {
   res.json({
-    message: '🍲 RecipeVerse Backend API v2.0',
-    status: '🚀 Live & Ready',
+    message: '🍲 RecipeVerse API v2.0 ✅',
     endpoints: {
-      auth: ['POST /api/auth/register', 'POST /api/auth/login'],
-      recipes: ['GET /api/recipes', 'POST /api/recipes'],
-      users: ['GET /api/users/:id']
+      auth: 'POST /api/auth/register, /api/auth/login',
+      recipes: 'GET/POST /api/recipes',
+      users: 'GET /api/users/:id'
     },
-    frontend: process.env.FRONTEND_URL || 'https://recipe-versemongodb.vercel.app',
-    docs: 'All routes working - check /api/health'
+    health: '/api/health'
   });
 });
 
-// 🚫 404 Handler - Clear error messages
+// 🚫 404 Catch-all
 app.use('*', (req, res) => {
   res.status(404).json({ 
-    error: 'Route not found 😅',
+    error: 'Route not found',
     path: req.originalUrl,
-    suggestion: 'Try /api/recipes or /api/auth/login',
-    available: ['/api/recipes', '/api/auth/register', '/api/auth/login']
+    try: ['/api/recipes', '/api/auth/login']
   });
 });
 
-// 💥 Global Error Handler
+// 💥 Error Handler
 app.use((err, req, res, next) => {
-  console.error('🚨 SERVER ERROR:', {
-    message: err.message,
-    stack: process.env.NODE_ENV === 'production' ? undefined : err.stack,
-    url: req.originalUrl,
-    method: req.method
-  });
-
-  res.status(err.status || 500).json({ 
-    error: 'Internal server error',
-    message: process.env.NODE_ENV === 'production' 
-      ? 'Something went wrong. Please try again.' 
-      : err.message
+  console.error('🚨 ERROR:', err.stack);
+  res.status(500).json({ 
+    error: 'Server error',
+    message: process.env.NODE_ENV === 'production' ? 'Try again later' : err.message
   });
 });
 
-// 🎯 Graceful shutdown
+// 🛑 Graceful Shutdown
 process.on('SIGTERM', () => {
-  console.log('SIGTERM received, shutting down gracefully');
-  mongoose.connection.close(() => {
-    console.log('MongoDB disconnected');
-    process.exit(0);
-  });
+  console.log('🛑 Shutting down...');
+  mongoose.connection.close(() => process.exit(0));
 });
 
-// 🚀 Start Server
+// 🚀 Launch
 const PORT = process.env.PORT || 5000;
-const server = app.listen(PORT, '0.0.0.0', () => {
-  console.log(`\n🚀 RecipeVerse Backend v2.0 LIVE on port ${PORT}`);
-  console.log(`📍 Environment: ${process.env.NODE_ENV || 'development'}`);
-  console.log(`🌐 CORS: ${process.env.FRONTEND_URL || 'localhost:5173'}`);
-  console.log(`🗄️ MongoDB: ${mongoose.connection.readyState === 1 ? '✅ Connected' : '❌ Connecting...'}`);
-  console.log(`🔗 Test: https://${process.env.RENDER_EXTERNAL_HOSTNAME || 'localhost:' + PORT}/api/health`);
-  console.log(`📱 Login: POST /api/auth/login`);
+app.listen(PORT, '0.0.0.0', () => {
+  console.log(`\n🚀 RecipeVerse LIVE on port ${PORT}`);
+  console.log(`📍 ${process.env.NODE_ENV || 'dev'}`);
+  console.log(`🌐 ${process.env.FRONTEND_URL || 'localhost:5173'}`);
+  console.log(`🧪 Test: /api/health`);
+  console.log(`🔐 Login: POST /api/auth/login`);
 });
 
-// Export for testing
-module.exports = server;
+module.exports = app;
