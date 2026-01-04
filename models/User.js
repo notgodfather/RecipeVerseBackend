@@ -1,5 +1,6 @@
-// backend/models/User.js - FULL PRODUCTION-READY VERSION
+// backend/models/User.js - FULL PRODUCTION-READY VERSION (FIXED)
 const mongoose = require('mongoose');
+const bcrypt = require('bcryptjs');  // ✅ FIXED: Missing bcrypt import
 
 const userSchema = new mongoose.Schema({
   // 👤 Basic Info
@@ -74,13 +75,17 @@ userSchema.index({ username: 1 });
 userSchema.index({ followers: 1 });
 userSchema.index({ following: 1 });
 
-// Pre-save middleware - Hash password
+// 🔐 Pre-save middleware - Hash password (FIXED: error handling)
 userSchema.pre('save', async function(next) {
-  if (!this.isModified('password')) return next();
-  
-  const salt = await bcrypt.genSalt(12);
-  this.password = await bcrypt.hash(this.password, salt);
-  next();
+  try {
+    if (!this.isModified('password')) return next();
+    
+    const salt = await bcrypt.genSalt(12);
+    this.password = await bcrypt.hash(this.password, salt);
+    next();
+  } catch (error) {
+    next(error);  // ✅ Pass errors to Mongoose
+  }
 });
 
 // 🔐 Compare password method
