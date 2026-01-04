@@ -1,32 +1,33 @@
-// backend/server.js - PERFECT PRODUCTION VERSION + MISSING FIXES
+// backend/server.js - ✅ FIXED mongoose + rate-limit warnings
 require('dotenv').config();
 const express = require('express');
 const mongoose = require('mongoose');
 const cors = require('cors');
-const cookieParser = require('cookie-parser'); // ✅ MISSING!
+const cookieParser = require('cookie-parser');
 const morgan = require('morgan');
 const helmet = require('helmet');
 const rateLimit = require('express-rate-limit');
 
 const app = express();
 
-// 🔥 SECURITY (Production Essential)
-app.use(helmet());
+// 🔥 FIX 1: Rate limit proxy (Render)
+app.set('trust proxy', 1);  // ✅ Fixes X-Forwarded-For warning
 
-// 🍪 Cookies - For auth tokens
+// 🛡️ Security
+app.use(helmet());
 app.use(cookieParser());
 
-// 🌐 CORS - Multi-origin support
+// 🌐 CORS
 app.use(cors({
   origin: process.env.NODE_ENV === 'production' 
-    ? [process.env.FRONTEND_URL || 'https://recipe-versemongodb.vercel.app']
+    ? [process.env.FRONTEND_URL || 'https://recipe-verse.vercel.app']
     : ['http://localhost:5173', 'http://localhost:3000'],
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization']
 }));
 
-// 📊 Rate limiting
+// 📊 Rate limiting (now proxy-safe)
 const limiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: 100,
@@ -40,7 +41,7 @@ app.use('/api/auth', limiter);
 app.use(express.json({ limit: '15mb' }));
 app.use(express.urlencoded({ extended: true, limit: '15mb' }));
 
-// 📈 Logging (dev)
+// 📈 Logging
 if (process.env.NODE_ENV !== 'production') {
   app.use(morgan('dev'));
 }
@@ -54,7 +55,7 @@ mongoose.connect(process.env.MONGO_URI)
     process.exit(1);
   });
 
-// 🚀 ROUTES - PERFECT ORDER
+// 🚀 ROUTES
 app.use('/api/auth', require('./routes/auth'));
 app.use('/api/recipes', require('./routes/recipes'));
 app.use('/api/users', require('./routes/users'));
@@ -70,7 +71,7 @@ app.get('/api/health', (req, res) => {
   });
 });
 
-// 📱 Root API Info
+// 📱 Root
 app.get('/', (req, res) => {
   res.json({
     message: '🍲 RecipeVerse API v2.0 ✅',
@@ -83,7 +84,7 @@ app.get('/', (req, res) => {
   });
 });
 
-// 🚫 404 Catch-all
+// 🚫 404
 app.use('*', (req, res) => {
   res.status(404).json({ 
     error: 'Route not found',
@@ -101,11 +102,15 @@ app.use((err, req, res, next) => {
   });
 });
 
-// 🛑 Graceful Shutdown
-process.on('SIGTERM', () => {
-  console.log('🛑 Shutting down...');
-  mongoose.connection.close(() => process.exit(0));
-});
+// 🛑 Graceful Shutdown - FIX 2: Mongoose 8+ (no callback)
+const gracefulShutdown = async (signal) => {
+  console.log(`🛑 Shutting down... (${signal})`);
+  await mongoose.connection.close();  // ✅ Promise - no callback
+  process.exit(0);
+};
+
+process.on('SIGTERM', gracefulShutdown);
+process.on('SIGINT', gracefulShutdown);  // Local Ctrl+C
 
 // 🚀 Launch
 const PORT = process.env.PORT || 5000;

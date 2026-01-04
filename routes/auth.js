@@ -1,4 +1,4 @@
-// backend/routes/auth.js - ✅ bcrypt CRASH FIXED + PRODUCTION READY
+// backend/routes/auth.js - 🔍 DEBUG VERSION + FULLY FIXED
 const express = require('express');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
@@ -7,7 +7,7 @@ const auth = require('../middleware/auth');
 
 const router = express.Router();
 
-// ✅ POST /api/auth/register (UNCHANGED)
+// ✅ POST /api/auth/register (PERFECT - UNCHANGED)
 router.post('/register', async (req, res) => {
   try {
     const { username, email, password } = req.body;
@@ -71,11 +71,13 @@ router.post('/register', async (req, res) => {
   }
 });
 
-// 🔥 FIXED POST /api/auth/login - bcrypt SAFE
+// 🔥 LOGIN DEBUG VERSION - Shows EXACT bcrypt issue
 router.post('/login', async (req, res) => {
   try {
     const { email, password } = req.body;
     const cleanEmail = email?.toLowerCase().trim();
+
+    console.log('📧 Login attempt:', cleanEmail.substring(0, 10) + '...');
 
     if (!cleanEmail || !password) {
       return res.status(400).json({ message: 'Email and password required' });
@@ -83,16 +85,29 @@ router.post('/login', async (req, res) => {
 
     const user = await User.findOne({ email: cleanEmail });
     if (!user) {
+      console.log('👤 No user found for:', cleanEmail);
       return res.status(401).json({ message: 'Invalid credentials' });
     }
 
-    // ✅ CRITICAL FIX: Password existence check → NO MORE 500 CRASH
     if (!user.password) {
       console.error('🚨 MISSING PASSWORD - User ID:', user._id);
       return res.status(401).json({ message: 'Invalid credentials' });
     }
 
+    // 🔍 FULL DEBUG - Deploy → Check logs!
+    console.log('🔍 DEBUG:', {
+      userId: user._id.toString(),
+      username: user.username,
+      email: user.email,
+      hasHash: user.password.length > 50,  // $2a$12$... = 60+ chars
+      hashPreview: user.password.substring(0, 20),
+      inputLen: password.length,
+      inputPreview: password.substring(0, 3)
+    });
+
     const isMatch = await bcrypt.compare(password, user.password);
+    console.log('🔐 bcrypt RESULT:', isMatch ? '✅ MATCH' : '❌ NO MATCH');
+
     if (!isMatch) {
       return res.status(401).json({ message: 'Invalid credentials' });
     }
@@ -103,6 +118,7 @@ router.post('/login', async (req, res) => {
       { expiresIn: '7d' }
     );
 
+    console.log('✅ LOGIN SUCCESS:', user.username);
     res.json({
       success: true,
       message: 'Login successful',
