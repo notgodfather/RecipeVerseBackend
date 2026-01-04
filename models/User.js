@@ -1,13 +1,13 @@
-// backend/models/User.js - FULL PRODUCTION-READY VERSION (FIXED)
+// backend/models/User.js - 🎉 FULLY FIXED: No index warnings + production-ready
 const mongoose = require('mongoose');
-const bcrypt = require('bcryptjs');  // ✅ FIXED: Missing bcrypt import
+const bcrypt = require('bcryptjs');
 
 const userSchema = new mongoose.Schema({
-  // 👤 Basic Info
+  // 👤 Basic Info - unique: true creates indexes automatically
   username: { 
     type: String, 
     required: [true, 'Username is required'],
-    unique: true,
+    unique: true,  // ✅ Auto-index (no schema.index needed)
     trim: true,
     minlength: [3, 'Username must be at least 3 characters'],
     maxlength: [30, 'Username cannot exceed 30 characters']
@@ -15,7 +15,7 @@ const userSchema = new mongoose.Schema({
   email: { 
     type: String, 
     required: [true, 'Email is required'],
-    unique: true,
+    unique: true,  // ✅ Auto-index (no schema.index needed)
     lowercase: true,
     trim: true,
     match: [/^\w+([.-]?\w+)*@\w+([.-]?\w+)*(\.\w{2,3})+$/, 'Please enter a valid email']
@@ -24,7 +24,7 @@ const userSchema = new mongoose.Schema({
     type: String, 
     required: [true, 'Password is required'],
     minlength: [6, 'Password must be at least 6 characters'],
-    select: false // Don't return in queries
+    select: false  // 🔑 Login uses .select('+password')
   },
 
   // 🌐 Profile
@@ -59,41 +59,38 @@ const userSchema = new mongoose.Schema({
   }
 
 }, { 
-  timestamps: true, // createdAt, updatedAt auto
+  timestamps: true,
   toJSON: { virtuals: true },
   toObject: { virtuals: true }
 });
 
-// 🌟 Virtuals - Computed fields
+// 🌟 Virtuals
 userSchema.virtual('fullName').get(function() {
   return `${this.username}`;
 });
 
-// 📈 Index for performance
-userSchema.index({ email: 1 });
-userSchema.index({ username: 1 });
+// ✅ FIXED: Only compound indexes (no duplicates)
+// unique: true already indexes username/email
 userSchema.index({ followers: 1 });
 userSchema.index({ following: 1 });
 
-// 🔐 Pre-save middleware - Hash password (FIXED: error handling)
+// 🔐 Pre-save: Auto-hash password
 userSchema.pre('save', async function(next) {
   try {
     if (!this.isModified('password')) return next();
-    
     const salt = await bcrypt.genSalt(12);
     this.password = await bcrypt.hash(this.password, salt);
     next();
   } catch (error) {
-    next(error);  // ✅ Pass errors to Mongoose
+    next(error);
   }
 });
 
-// 🔐 Compare password method
+// 🔐 Password methods
 userSchema.methods.matchPassword = async function(enteredPassword) {
   return await bcrypt.compare(enteredPassword, this.password);
 };
 
-// 💾 JSON output - Exclude password
 userSchema.methods.toJSON = function() {
   const user = this.toObject();
   delete user.password;
