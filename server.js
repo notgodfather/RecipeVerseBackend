@@ -138,14 +138,6 @@ const initServer = async () => {
     await mongoose.connect(mongoUri, mongooseOptions);
     console.log('✅ MongoDB Connected');
 
-    // 📂 STATIC FILES (Production)
-    if (process.env.NODE_ENV === 'production') {
-      app.use(express.static(path.join(__dirname, '../frontend/dist')));
-      app.get('*', (req, res) => {
-        res.sendFile(path.join(__dirname, '../frontend/dist/index.html'));
-      });
-    }
-
     // 🚀 ROUTES (Protected with rate limits)
     app.use('/api/auth', authLimiter, require('./routes/auth'));
     app.use('/api/recipes', apiLimiter, recipeLimiter, require('./routes/recipes'));
