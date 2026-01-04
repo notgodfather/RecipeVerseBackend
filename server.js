@@ -122,14 +122,18 @@ const initServer = async () => {
       throw new Error('MONGO_URI not set in environment');
     }
 
-    const mongooseOptions = {
-      maxPoolSize: 10,
-      serverSelectionTimeoutMS: 5000,
-      socketTimeoutMS: 45000,
-      bufferMaxEntries: 0,
-      retryWrites: true,
-      w: 'majority'
-    };
+   const mongooseOptions = {
+  maxPoolSize: 10,
+  minPoolSize: 2,
+  serverSelectionTimeoutMS: 5000,
+  socketTimeoutMS: 45000,
+  retryWrites: true,
+  w: 'majority',
+  wtimeoutMS: 10000,
+  bufferCommands: false,  // ✅ Modern
+  family: 4  // IPv4 only
+};
+
 
     await mongoose.connect(mongoUri, mongooseOptions);
     console.log('✅ MongoDB Connected');
