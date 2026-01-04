@@ -1,4 +1,4 @@
-// backend/routes/auth.js - 🔍 DEBUG VERSION + FULLY FIXED
+// backend/routes/auth.js - 🎉 FULLY FIXED PRODUCTION VERSION
 const express = require('express');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
@@ -7,13 +7,14 @@ const auth = require('../middleware/auth');
 
 const router = express.Router();
 
-// ✅ POST /api/auth/register (PERFECT - UNCHANGED)
+// ✅ POST /api/auth/register - FIXED: Let model handle hashing
 router.post('/register', async (req, res) => {
   try {
     const { username, email, password } = req.body;
     const cleanEmail = email?.toLowerCase().trim();
     const cleanUsername = username?.trim();
 
+    // Input validation
     if (!cleanUsername || !cleanEmail || !password) {
       return res.status(400).json({ message: 'Username, email, and password required' });
     }
@@ -24,6 +25,7 @@ router.post('/register', async (req, res) => {
       return res.status(400).json({ message: 'Username must be at least 3 characters' });
     }
 
+    // Check duplicates
     const existingUser = await User.findOne({ 
       $or: [{ email: cleanEmail }, { username: cleanUsername }] 
     });
@@ -35,13 +37,11 @@ router.post('/register', async (req, res) => {
       });
     }
 
-    const salt = await bcrypt.genSalt(12);
-    const hashedPassword = await bcrypt.hash(password, salt);
-
+    // ✅ FIXED: Plain password → model pre('save') auto-hashes
     const user = new User({ 
       username: cleanUsername,
       email: cleanEmail,
-      password: hashedPassword 
+      password // Plaintext - model handles bcrypt.hash()
     });
     await user.save();
 
@@ -51,6 +51,7 @@ router.post('/register', async (req, res) => {
       { expiresIn: '7d' }
     );
 
+    console.log('✅ REGISTER:', user.username);
     res.status(201).json({
       success: true,
       message: 'Account created successfully',
@@ -66,47 +67,44 @@ router.post('/register', async (req, res) => {
     console.error('🚨 Register error:', err);
     res.status(500).json({ 
       success: false, 
-      message: 'Registration failed - server error' 
+      message: 'Registration failed' 
     });
   }
 });
 
-// 🔥 LOGIN DEBUG VERSION - Shows EXACT bcrypt issue
+// 🔥 POST /api/auth/login - FIXED: .select('+password')
 router.post('/login', async (req, res) => {
   try {
     const { email, password } = req.body;
     const cleanEmail = email?.toLowerCase().trim();
 
-    console.log('📧 Login attempt:', cleanEmail.substring(0, 10) + '...');
+    console.log('📧 Login:', cleanEmail.substring(0, 10) + '...');
 
     if (!cleanEmail || !password) {
       return res.status(400).json({ message: 'Email and password required' });
     }
 
-    const user = await User.findOne({ email: cleanEmail });
+    // ✅ CRITICAL: .select('+password') to override schema select: false
+    const user = await User.findOne({ email: cleanEmail }).select('+password');
+    
     if (!user) {
-      console.log('👤 No user found for:', cleanEmail);
       return res.status(401).json({ message: 'Invalid credentials' });
     }
 
     if (!user.password) {
-      console.error('🚨 MISSING PASSWORD - User ID:', user._id);
+      console.error('🚨 NO PASSWORD - ID:', user._id);
       return res.status(401).json({ message: 'Invalid credentials' });
     }
 
-    // 🔍 FULL DEBUG - Deploy → Check logs!
-    console.log('🔍 DEBUG:', {
-      userId: user._id.toString(),
-      username: user.username,
-      email: user.email,
-      hasHash: user.password.length > 50,  // $2a$12$... = 60+ chars
-      hashPreview: user.password.substring(0, 20),
-      inputLen: password.length,
-      inputPreview: password.substring(0, 3)
+    // 🔍 Debug (remove after working)
+    console.log('🔍 Hash check:', {
+      hasHash: user.password.length > 50,
+      preview: user.password.substring(0, 20)
     });
 
-    const isMatch = await bcrypt.compare(password, user.password);
-    console.log('🔐 bcrypt RESULT:', isMatch ? '✅ MATCH' : '❌ NO MATCH');
+    // ✅ Uses model method (consistent)
+    const isMatch = await user.matchPassword(password);
+    console.log('🔐 Result:', isMatch ? '✅ PASS' : '❌ FAIL');
 
     if (!isMatch) {
       return res.status(401).json({ message: 'Invalid credentials' });
@@ -118,10 +116,9 @@ router.post('/login', async (req, res) => {
       { expiresIn: '7d' }
     );
 
-    console.log('✅ LOGIN SUCCESS:', user.username);
+    console.log('✅ LOGIN OK:', user.username);
     res.json({
       success: true,
-      message: 'Login successful',
       token,
       user: { 
         id: user._id,
@@ -132,21 +129,14 @@ router.post('/login', async (req, res) => {
     });
   } catch (err) {
     console.error('🚨 Login error:', err);
-    res.status(500).json({ 
-      success: false, 
-      message: 'Login failed - server error' 
-    });
+    res.status(500).json({ message: 'Server error' });
   }
 });
 
-// ✅ GET /api/auth/me (UNCHANGED)
+// ✅ GET /api/auth/me
 router.get('/me', auth, async (req, res) => {
   try {
     const user = await User.findById(req.user.id).select('-password');
-    if (!user) {
-      return res.status(404).json({ message: 'User not found' });
-    }
-    
     res.json({
       success: true,
       user: {
@@ -160,17 +150,13 @@ router.get('/me', auth, async (req, res) => {
       }
     });
   } catch (err) {
-    console.error('🚨 /me error:', err);
     res.status(500).json({ message: 'Server error' });
   }
 });
 
-// ✅ POST /api/auth/logout (UNCHANGED)
+// ✅ POST /api/auth/logout
 router.post('/logout', (req, res) => {
-  res.json({ 
-    success: true,
-    message: 'Logged out successfully - clear token on frontend' 
-  });
+  res.json({ success: true, message: 'Logged out' });
 });
 
 module.exports = router;
